@@ -15,6 +15,7 @@ const Index = () => {
   const [status, setStatus] = useState<ProcessingStatus>(ProcessingStatus.IDLE);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const [apiKey, setApiKey] = useState<string>(DEFAULT_API_KEY);
+  const [retries, setRetries] = useState(0);
 
   const handleApiKeySet = (key: string) => {
     const finalKey = key || DEFAULT_API_KEY;
@@ -52,15 +53,36 @@ const Index = () => {
       
       setStatus(ProcessingStatus.PROCESSING);
       
+      console.log('Processing invoice file:', file.name);
+      
       // Extract data from the invoice
       const extractedData = await extractInvoiceData(file);
+      
+      if (!extractedData) {
+        throw new Error('Failed to extract data from invoice');
+      }
+      
+      console.log('Successfully extracted invoice data:', extractedData);
       
       setInvoiceData(extractedData);
       setStatus(ProcessingStatus.COMPLETE);
     } catch (error) {
       console.error('Error processing invoice:', error);
-      toast.error('Failed to process invoice. Please try again.');
-      setStatus(ProcessingStatus.ERROR);
+      
+      // Check if we should retry
+      if (retries < 2) {
+        toast.error('Error processing invoice. Retrying...');
+        setRetries(prev => prev + 1);
+        
+        // Wait a moment and try again
+        setTimeout(() => {
+          handleFileUploaded(file);
+        }, 2000);
+      } else {
+        toast.error('Failed to process invoice. Please try again with a different image or check your API key.');
+        setStatus(ProcessingStatus.ERROR);
+        setRetries(0);
+      }
     }
   };
 

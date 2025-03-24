@@ -1,3 +1,4 @@
+
 import { InvoiceData, InvoiceItem, ProcessingStatus } from '@/types/invoice';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
@@ -42,15 +43,15 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
 const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
   try {
     // Get the API key from localStorage or from window global
-    const apiKey = localStorage.getItem('openaiApiKey') || (window as any).API_KEY;
+    const apiKey = localStorage.getItem('openaiApiKey') || (window as any).API_KEY || "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";
     
     // Check if API key is available
     if (!apiKey) {
-      console.warn('API key not provided. Using mock data instead.');
-      // Wait to simulate API call
-      await new Promise(r => setTimeout(r, 1500));
-      return generateMockInvoiceData();
+      console.error('API key not provided');
+      throw new Error('API key not provided');
     }
+    
+    console.log('Calling OpenAI API with image...');
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -63,14 +64,54 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
         messages: [
           {
             role: "system",
-            content: "You are an expert at extracting invoice data from images. Extract all relevant details from the invoice image including invoice number, date, due date, customer information, line items, subtotal, tax rate, tax amount, and total. Format your response as valid JSON matching this structure: {\"invoiceNumber\": \"\", \"date\": \"\", \"dueDate\": \"\", \"customerName\": \"\", \"customerAddress\": \"\", \"customerEmail\": \"\", \"items\": [{\"id\": \"\", \"description\": \"\", \"quantity\": 0, \"unitPrice\": 0, \"amount\": 0}], \"subtotal\": 0, \"taxRate\": 0, \"taxAmount\": 0, \"total\": 0, \"notes\": \"\"}"
+            content: `You are an expert at extracting invoice data from images, especially handwritten invoices. 
+            Extract ALL details visible in the invoice image including:
+            - Invoice number
+            - Date
+            - Due date (if present, otherwise use date + 30 days)
+            - Customer/client name
+            - Customer address (if present)
+            - Customer email (if present)
+            - All line items with description, quantity, unit price, and amount
+            - Subtotal
+            - Tax rate percentage and tax amount
+            - Total amount
+            - Any notes or terms
+            
+            Be extremely precise and extract EXACTLY what's in the image, even if handwritten.
+            For any fields not visible in the invoice, leave them blank or use reasonable defaults.
+            If you're unsure about any value, make your best guess but flag it.
+            
+            Format your response as valid JSON matching this structure: 
+            {
+              "invoiceNumber": "",
+              "date": "",
+              "dueDate": "",
+              "customerName": "",
+              "customerAddress": "",
+              "customerEmail": "",
+              "items": [
+                {
+                  "id": "",
+                  "description": "",
+                  "quantity": 0,
+                  "unitPrice": 0,
+                  "amount": 0
+                }
+              ],
+              "subtotal": 0,
+              "taxRate": 0,
+              "taxAmount": 0,
+              "total": 0,
+              "notes": ""
+            }`
           },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: "Extract all the invoice data from this image as JSON."
+                text: "Extract all the invoice data from this image as JSON. Be extremely precise and extract exactly what's in the image, even if handwritten or partially visible."
               },
               {
                 type: "image_url",
@@ -81,7 +122,8 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
             ]
           }
         ],
-        max_tokens: 2000
+        max_tokens: 2500,
+        temperature: 0.3 // Lower temperature for more precise extraction
       })
     });
     
@@ -135,16 +177,19 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
     return processedData;
   } catch (error) {
     console.error('Error calling Vision API:', error);
-    // Fall back to mock data if the API call fails
-    toast.error('Error processing with AI. Using sample data instead.');
-    return generateMockInvoiceData();
+    throw error; // Throw the error instead of falling back to mock data
   }
 };
 
 // Process and validate the extracted data
 const processExtractedData = (extractedData: any): InvoiceData => {
+  // Create default items if none exist
+  const items = extractedData.items && Array.isArray(extractedData.items) && extractedData.items.length > 0
+    ? extractedData.items
+    : [];
+  
   // Ensure items have proper structure and IDs
-  const processedItems = (extractedData.items || []).map((item: any) => ({
+  const processedItems = items.map((item: any, index: number) => ({
     id: item.id || uuidv4(),
     description: item.description || '',
     quantity: Number(item.quantity) || 0,
@@ -152,30 +197,68 @@ const processExtractedData = (extractedData: any): InvoiceData => {
     amount: Number(item.amount) || (Number(item.quantity) * Number(item.unitPrice)) || 0
   }));
   
+  // Add default item if no items were found
+  if (processedItems.length === 0) {
+    processedItems.push(createDefaultItem());
+  }
+  
   // Calculate subtotal from items if not provided
-  const subtotal = extractedData.subtotal || 
-                  processedItems.reduce((sum: number, item: InvoiceItem) => sum + item.amount, 0);
+  const subtotal = extractedData.subtotal !== undefined && extractedData.subtotal !== null
+    ? Number(extractedData.subtotal)
+    : processedItems.reduce((sum: number, item: InvoiceItem) => sum + item.amount, 0);
   
   // Calculate tax amount if not provided
-  const taxRate = Number(extractedData.taxRate) || 0;
-  const taxAmount = extractedData.taxAmount || (subtotal * taxRate / 100);
+  const taxRate = extractedData.taxRate !== undefined && extractedData.taxRate !== null
+    ? Number(extractedData.taxRate)
+    : 0;
+  
+  const taxAmount = extractedData.taxAmount !== undefined && extractedData.taxAmount !== null
+    ? Number(extractedData.taxAmount)
+    : (subtotal * taxRate / 100);
   
   // Calculate total if not provided
-  const total = extractedData.total || (subtotal + taxAmount);
+  const total = extractedData.total !== undefined && extractedData.total !== null
+    ? Number(extractedData.total)
+    : (subtotal + taxAmount);
+  
+  // Handle dates
+  let invoiceDate = extractedData.date;
+  if (!invoiceDate) {
+    invoiceDate = new Date().toISOString().split('T')[0];
+  } else if (typeof invoiceDate === 'string' && invoiceDate.match(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/)) {
+    // Convert from MM/DD/YYYY or DD/MM/YYYY to YYYY-MM-DD
+    const parts = invoiceDate.split('/');
+    if (parts.length === 3) {
+      let year = parts[2];
+      if (year.length === 2) year = '20' + year;
+      
+      // Handle both MM/DD/YYYY and DD/MM/YYYY formats (based on what's likely in the context)
+      // For simplicity, assume DD/MM/YYYY format
+      invoiceDate = `${year}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  
+  // Calculate due date if not provided (add 30 days to invoice date)
+  let dueDate = extractedData.dueDate;
+  if (!dueDate) {
+    const date = new Date(invoiceDate);
+    date.setDate(date.getDate() + 30);
+    dueDate = date.toISOString().split('T')[0];
+  }
   
   return {
-    invoiceNumber: extractedData.invoiceNumber || `INV-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`,
-    date: extractedData.date || new Date().toISOString().split('T')[0],
-    dueDate: extractedData.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    invoiceNumber: extractedData.invoiceNumber || '',
+    date: invoiceDate,
+    dueDate: dueDate,
     customerName: extractedData.customerName || '',
     customerAddress: extractedData.customerAddress || '',
     customerEmail: extractedData.customerEmail || '',
-    items: processedItems.length ? processedItems : [createDefaultItem()],
+    items: processedItems,
     subtotal,
     taxRate,
     taxAmount,
     total,
-    notes: extractedData.notes || 'Thank you for your business!'
+    notes: extractedData.notes || ''
   };
 };
 
