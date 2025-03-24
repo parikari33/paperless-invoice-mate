@@ -15,9 +15,13 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onApiKeySet }) => {
   const [saved, setSaved] = useState<boolean>(false);
   const [showInput, setShowInput] = useState<boolean>(false);
   
+  // Default API key provided by the user
+  const defaultApiKey = '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';
+  
   useEffect(() => {
-    // Check if API key exists in localStorage
-    const storedApiKey = localStorage.getItem('openaiApiKey');
+    // Check if API key exists in localStorage, else use the default
+    const storedApiKey = localStorage.getItem('openaiApiKey') || defaultApiKey;
+    
     if (storedApiKey) {
       setApiKey(storedApiKey);
       setSaved(true);
@@ -25,7 +29,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onApiKeySet }) => {
     } else {
       setShowInput(true);
     }
-  }, [onApiKeySet]);
+  }, [onApiKeySet, defaultApiKey]);
   
   const handleSaveKey = () => {
     if (!apiKey.trim()) {
@@ -57,7 +61,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onApiKeySet }) => {
   
   if (!showInput && saved) {
     return (
-      <div className="flex items-center justify-between px-4 py-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-900/30 text-sm mb-4">
+      <div className="flex items-center justify-between px-4 py-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-900/30 text-sm mb-4 shadow-sm backdrop-blur-sm animate-fade-in">
         <div className="flex items-center">
           <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
           <span className="text-green-700 dark:text-green-400">API key is set</span>
@@ -75,7 +79,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({ onApiKeySet }) => {
   }
   
   return (
-    <Card className="p-4 mb-4 bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/30">
+    <Card className="p-4 mb-4 bg-amber-50 dark:bg-amber-900/20 border-amber-100 dark:border-amber-800/30 shadow-md animate-fade-in">
       <div className="flex flex-col space-y-2">
         <div className="flex items-start">
           <AlertCircle className="w-5 h-5 text-amber-500 mr-2 mt-0.5 flex-shrink-0" />
