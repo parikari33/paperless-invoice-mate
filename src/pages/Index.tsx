@@ -8,27 +8,43 @@ import { extractInvoiceData } from '@/utils/invoiceExtractor';
 import { InvoiceData, ProcessingStatus } from '@/types/invoice';
 import { toast } from 'sonner';
 
+// Default API key - this will be used if no key is provided by the user
+const DEFAULT_API_KEY = "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";
+
 const Index = () => {
   const [status, setStatus] = useState<ProcessingStatus>(ProcessingStatus.IDLE);
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
-  const [apiKey, setApiKey] = useState<string>('');
+  const [apiKey, setApiKey] = useState<string>(DEFAULT_API_KEY);
 
   const handleApiKeySet = (key: string) => {
-    setApiKey(key);
-    // Update the global API_KEY variable in the invoiceExtractor.ts
-    (window as any).API_KEY = key;
+    const finalKey = key || DEFAULT_API_KEY;
+    setApiKey(finalKey);
+    
+    // Store in localStorage for persistence
+    localStorage.setItem('openaiApiKey', finalKey);
+    
+    // Set the global variable for the invoiceExtractor to use
+    (window as any).API_KEY = finalKey;
+    
+    toast.success('API key set successfully');
   };
 
   useEffect(() => {
     // Check for API key in localStorage on component mount
     const storedApiKey = localStorage.getItem('openaiApiKey');
     if (storedApiKey) {
-      handleApiKeySet(storedApiKey);
+      setApiKey(storedApiKey);
+      (window as any).API_KEY = storedApiKey;
+    } else {
+      // Use default key if none stored
+      handleApiKeySet(DEFAULT_API_KEY);
     }
   }, []);
 
   const handleFileUploaded = async (file: File) => {
     try {
+      // Reset any previous invoice data
+      setInvoiceData(null);
       setStatus(ProcessingStatus.UPLOADING);
       
       // Short delay to show uploading state

@@ -1,11 +1,6 @@
-
 import { InvoiceData, InvoiceItem, ProcessingStatus } from '@/types/invoice';
 import { toast } from 'sonner';
 import { v4 as uuidv4 } from 'uuid';
-
-// API key for OpenAI (in a real app, this would be stored in environment variables)
-// This is a placeholder - replace with your actual API key in a secure way
-const API_KEY = ""; // Replace with your OpenAI API key
 
 // Function to extract invoice data using Vision-Language Model API
 export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
@@ -46,8 +41,11 @@ export const extractInvoiceData = async (file: File): Promise<InvoiceData> => {
 // Function to call the OpenAI Vision API
 const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
   try {
+    // Get the API key from localStorage or from window global
+    const apiKey = localStorage.getItem('openaiApiKey') || (window as any).API_KEY;
+    
     // Check if API key is available
-    if (!API_KEY) {
+    if (!apiKey) {
       console.warn('API key not provided. Using mock data instead.');
       // Wait to simulate API call
       await new Promise(r => setTimeout(r, 1500));
@@ -58,7 +56,7 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: "gpt-4o",
@@ -87,17 +85,21 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
       })
     });
     
-    const data = await response.json();
-    
     if (!response.ok) {
-      throw new Error(`API error: ${data.error?.message || 'Unknown error'}`);
+      const errorData = await response.json();
+      console.error('API error:', errorData);
+      throw new Error(`API error: ${errorData.error?.message || 'Unknown error'}`);
     }
+    
+    const data = await response.json();
     
     // Extract the JSON from the response
     const content = data.choices[0]?.message?.content;
     if (!content) {
       throw new Error('No content in API response');
     }
+    
+    console.log('Raw API response content:', content);
     
     // Extract the JSON object from the content
     let extractedJson;
@@ -110,19 +112,31 @@ const callVisionAPI = async (base64Image: string): Promise<InvoiceData> => {
                         content.match(/{[\s\S]*?}/);
       
       if (jsonMatch) {
-        extractedJson = JSON.parse(jsonMatch[0].replace(/```json|```/g, '').trim());
+        try {
+          const jsonContent = jsonMatch[0].replace(/```json|```/g, '').trim();
+          console.log('Extracted JSON content:', jsonContent);
+          extractedJson = JSON.parse(jsonContent);
+        } catch (parseError) {
+          console.error('Error parsing extracted JSON:', parseError);
+          throw new Error('Failed to parse JSON from API response');
+        }
       } else {
-        throw new Error('Failed to parse JSON from API response');
+        throw new Error('Failed to find JSON in API response');
       }
     }
     
+    console.log('Extracted data before processing:', extractedJson);
+    
     // Process the extracted data to ensure it matches our expected format
     const processedData = processExtractedData(extractedJson);
+    
+    console.log('Processed invoice data:', processedData);
     
     return processedData;
   } catch (error) {
     console.error('Error calling Vision API:', error);
     // Fall back to mock data if the API call fails
+    toast.error('Error processing with AI. Using sample data instead.');
     return generateMockInvoiceData();
   }
 };

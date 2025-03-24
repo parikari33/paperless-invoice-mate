@@ -21,6 +21,7 @@ const InvoiceUploader: React.FC<InvoiceUploaderProps> = ({
 
   const isProcessing = status === ProcessingStatus.UPLOADING || status === ProcessingStatus.PROCESSING;
   const isComplete = status === ProcessingStatus.COMPLETE;
+  const isError = status === ProcessingStatus.ERROR;
 
   const handleFile = useCallback((file: File) => {
     // Check if file is an image
@@ -71,6 +72,13 @@ const InvoiceUploader: React.FC<InvoiceUploaderProps> = ({
     }
   }, [handleFile]);
 
+  const resetUploader = () => {
+    setPreviewUrl(null);
+    // Reset file input
+    const fileInput = document.getElementById('fileInput') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
+  };
+
   return (
     <div 
       className={cn(
@@ -90,6 +98,7 @@ const InvoiceUploader: React.FC<InvoiceUploaderProps> = ({
           'animate-fade-in',
           isProcessing && 'opacity-70 pointer-events-none',
           isComplete && 'border-green-500/50 bg-green-500/5',
+          isError && 'border-red-500/50 bg-red-500/5',
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -118,6 +127,14 @@ const InvoiceUploader: React.FC<InvoiceUploaderProps> = ({
                   <CheckCheck className="w-8 h-8 text-white" />
                 </div>
                 <p className="text-white font-medium shadow-sm">Processing complete</p>
+              </div>
+            )}
+            {isError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/10 backdrop-blur-xs animate-fade-in">
+                <div className="w-16 h-16 rounded-full bg-red-500/90 flex items-center justify-center mb-4 animate-scale-in">
+                  <AlertCircle className="w-8 h-8 text-white" />
+                </div>
+                <p className="text-white font-medium shadow-sm">Error processing image</p>
               </div>
             )}
           </div>
@@ -163,17 +180,13 @@ const InvoiceUploader: React.FC<InvoiceUploaderProps> = ({
         />
       </div>
       
-      {previewUrl && !isComplete && (
+      {previewUrl && !isComplete && !isProcessing && (
         <button
           onClick={(e) => {
             e.stopPropagation();
-            setPreviewUrl(null);
-            // Reset file input
-            const fileInput = document.getElementById('fileInput') as HTMLInputElement;
-            if (fileInput) fileInput.value = '';
+            resetUploader();
           }}
           className="mt-4 text-sm text-muted-foreground hover:text-foreground flex items-center"
-          disabled={isProcessing}
         >
           <AlertCircle className="w-3 h-3 mr-1" />
           <span>Remove and upload a different image</span>
