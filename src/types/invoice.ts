@@ -34,3 +34,13 @@ export enum ProcessingStatus {
   COMPLETE = 'complete',
   ERROR = 'error'
 }
+
+export enum FileFormat {
+  JSON = 'json',
+  PDF = 'pdf'
+}
+
+export interface PdfPreviewOptions {
+  isOpen: boolean;
+  url: string | null;
+}
